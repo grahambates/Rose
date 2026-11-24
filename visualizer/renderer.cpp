@@ -1,6 +1,5 @@
 
-#define GLEW_BUILD GLEW_STATIC
-#include <GL/glew.h>
+#include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
 #include "renderer.h"
@@ -217,7 +216,7 @@ bool RoseRenderer::draw(int frame, bool overlay_enabled) {
 	int layers = rose_data.layer_count;
 	for (int l = 0; l < layers; l++) {
 		// Render to FBO
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuf[l]);
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuf[l]);
 		glViewport(0, 0, width, height);
 
 		// Set layer uniforms
@@ -247,7 +246,7 @@ bool RoseRenderer::draw(int frame, bool overlay_enabled) {
 	// Combine pass
 
 	// Render to original render target
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target);
+	glBindFramebuffer(GL_FRAMEBUFFER, target);
 	glViewport(vp[0], vp[1], vp[2], vp[3]);
 
 	// Set up vertex streams

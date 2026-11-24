@@ -2,22 +2,23 @@
 #include <string>
 
 #include <sys/stat.h>
-#include <unistd.h>
 #include <time.h>
 
 class FileWatch {
 	std::string filename;
-	struct stat filestat;
+	struct stat filestat = {};
+	bool valid;
 public:
 	FileWatch(const char *name): filename(name) {
-		stat(filename.c_str(), &filestat);
+		valid = stat(filename.c_str(), &filestat) == 0;
 	}
 
 	bool changed() {
 		struct stat newfilestat;
-		stat(filename.c_str(), &newfilestat);
-		if (newfilestat.st_mtime != filestat.st_mtime) {
+		if (stat(filename.c_str(), &newfilestat) != 0) return false;
+		if (!valid || newfilestat.st_mtime != filestat.st_mtime) {
 			filestat = newfilestat;
+			valid = true;
 			return true;
 		} else {
 			return false;

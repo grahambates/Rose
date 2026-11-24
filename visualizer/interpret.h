@@ -5,6 +5,7 @@
 #include "translate.h"
 
 #include <functional>
+#include <cstdint>
 #include <cstring>
 #include <queue>
 #include <unordered_set>

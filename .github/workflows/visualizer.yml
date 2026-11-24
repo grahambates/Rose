@@ -1,0 +1,114 @@
+name: Visualizer builds
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: rose-linux-x86_64
+          - os: macos-latest
+            artifact: rose-macos-arm64
+          - os: windows-latest
+            artifact: rose-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build pkg-config libglfw3-dev portaudio19-dev libgl1-mesa-dev xvfb xauth
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja pkg-config glfw portaudio
+
+      - uses: actions/setup-python@v5
+        if: runner.os != 'Windows'
+        with:
+          python-version: '3.12'
+      - name: Install GLAD generator dependency
+        if: runner.os != 'Windows'
+        run: python -m pip install jinja2
+
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        with:
+          msystem: UCRT64
+          update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-glfw
+            mingw-w64-ucrt-x86_64-portaudio
+            mingw-w64-ucrt-x86_64-python-jinja
+
+      - name: Configure, build and test
+        if: runner.os != 'Windows'
+        run: |
+          cmake -S visualizer -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPython_EXECUTABLE="$(command -v python)"
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+          cmake --install build --prefix "$GITHUB_WORKSPACE/package"
+          tar -czf "${{ matrix.artifact }}.tar.gz" -C package .
+
+      - name: Configure, build and test on Windows
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cmake -S visualizer -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DJava_JAVA_EXECUTABLE="$(cygpath -m "$JAVA_HOME/bin/java.exe")" \
+            -DPython_EXECUTABLE="$(cygpath -m /ucrt64/bin/python3.exe)"
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+          cmake --install build --prefix "$GITHUB_WORKSPACE/package"
+          cp /ucrt64/bin/{glfw3.dll,libportaudio.dll,libgcc_s_seh-1.dll,libstdc++-6.dll,libwinpthread-1.dll} package/
+          mkdir -p package/licenses
+          cp /ucrt64/share/licenses/glfw/LICENSE package/licenses/glfw.txt
+          cp /ucrt64/share/doc/portaudio/LICENSE.txt package/licenses/portaudio.txt
+          for name in libgcc libstdc++ libwinpthread gcc-libs winpthreads; do
+            if [ -d "/ucrt64/share/licenses/$name" ]; then
+              cp -R "/ucrt64/share/licenses/$name" package/licenses/
+            fi
+          done
+          tar -czf "${{ matrix.artifact }}.tar.gz" -C package .
+
+      - name: Smoke test Linux rendering
+        if: runner.os == 'Linux'
+        working-directory: ${{ runner.temp }}
+        run: |
+          for mode in modern legacy; do
+            if [ "$mode" = legacy ]; then
+              export MESA_GL_VERSION_OVERRIDE=2.1
+              export MESA_EXTENSION_OVERRIDE=-GL_ARB_framebuffer_object
+            fi
+            set +e
+            timeout 8s xvfb-run -a "$GITHUB_WORKSPACE/build/rose" "$GITHUB_WORKSPACE/examples/ball.rose"
+            result=$?
+            set -e
+            test "$result" -eq 124
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error

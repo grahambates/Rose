@@ -1,4 +1,6 @@
 
+#include <chrono>
+
 class MusicPlayer {
 	unsigned samplepos = 0;
 	unsigned n_samples = 0;
@@ -7,6 +9,9 @@ class MusicPlayer {
 
 	short *wavdata = nullptr;
 	void *stream = nullptr;
+	bool audio_initialized = false;
+	std::chrono::steady_clock::time_point clock_start;
+	double clock_time = 0.0;
 
 public:
 	MusicPlayer();

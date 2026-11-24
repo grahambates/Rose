@@ -200,3 +200,35 @@ Keyboard shortcuts:
 Clicking or holding the left mouse button sets the time proportionally to
 the mouse X position within the window, up to the total number of frames.
 
+
+BUILDING THE VISUALIZER
+
+Build the visualizer with a C++11 compiler, CMake 3.20 or later, Java,
+Python 3 with Jinja2, pkg-config, GLFW, PortAudio and OpenGL development
+libraries installed. CMake downloads the pinned GLAD OpenGL loader during
+the first build.
+
+Linux (Debian/Ubuntu):
+  sudo apt install cmake g++ default-jre python3-jinja2 pkg-config libglfw3-dev portaudio19-dev libgl1-mesa-dev
+
+macOS (Homebrew):
+  brew install cmake pkg-config glfw portaudio openjdk python
+  python3 -m venv .venv
+  . .venv/bin/activate
+  pip install Jinja2
+
+Windows: use the MSYS2 UCRT64 environment with the gcc, cmake, pkgconf,
+glfw, portaudio and python-jinja UCRT64 packages, and a Java runtime.
+
+From the repository root, build and test with:
+  cmake -S visualizer -B build -DCMAKE_BUILD_TYPE=Release
+  cmake --build build
+  ctest --test-dir build --output-on-failure
+
+The executable is build/rose (build/rose.exe on Windows). GitHub Actions
+also produces artifacts for Linux x86-64, macOS Apple Silicon and Windows
+x86-64. The Windows artifact includes its required non-system DLLs. The
+Linux and macOS artifacts require GLFW and PortAudio runtime libraries;
+on macOS, install them with `brew install glfw portaudio`. Extract the
+tar.gz inside the downloaded artifact to retain executable permissions.
+

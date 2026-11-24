@@ -1,11 +1,12 @@
 
-#define GLEW_BUILD GLEW_STATIC
-#include <GL/glew.h>
+#include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
 #include <queue>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
+#include <thread>
 
 #include "translate.h"
 #include "renderer.h"
@@ -33,6 +34,10 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 	if (action == GLFW_PRESS || action == GLFW_REPEAT) {
 		key_queue->push(key);
 	}
+}
+
+void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
+	glViewport(0, 0, width, height);
 }
 
 static RoseRenderer* make_renderer(RoseResult rose_data) {
@@ -102,16 +107,37 @@ int main(int argc, char *argv[]) {
 
 	// Initialize GLFW
 	glfwSetErrorCallback(error_callback);
-	glfwInit();
+	if (!glfwInit()) return 1;
 
 	// Initialize Window
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 	glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 	GLFWwindow *window = glfwCreateWindow(width * window_scale, height * window_scale, "Rose", nullptr, nullptr);
+	if (!window) {
+		glfwTerminate();
+		return 1;
+	}
 	glfwMakeContextCurrent(window);
-	glewExperimental = GL_TRUE;
-	glewInit();
+	int gl_version = gladLoadGL(glfwGetProcAddress);
+	if (!gl_version || !(GLAD_GL_VERSION_3_0 || GLAD_GL_ARB_framebuffer_object || GLAD_GL_EXT_framebuffer_object)) {
+		if (!gl_version) printf("OpenGL initialization failed.\n");
+		else printf("OpenGL framebuffer objects are not available.\n");
+		glfwDestroyWindow(window);
+		glfwTerminate();
+		return 1;
+	}
+	if (!GLAD_GL_VERSION_3_0 && !GLAD_GL_ARB_framebuffer_object) {
+		glad_glBindFramebuffer = glad_glBindFramebufferEXT;
+		glad_glCheckFramebufferStatus = glad_glCheckFramebufferStatusEXT;
+		glad_glDeleteFramebuffers = glad_glDeleteFramebuffersEXT;
+		glad_glFramebufferTexture2D = glad_glFramebufferTexture2DEXT;
+		glad_glGenFramebuffers = glad_glGenFramebuffersEXT;
+	}
+	int framebuffer_width, framebuffer_height;
+	glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
+	glViewport(0, 0, framebuffer_width, framebuffer_height);
+	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfwSwapInterval(1);
 	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 
@@ -138,7 +164,7 @@ int main(int argc, char *argv[]) {
 			rose_result = translate(main_filename, frames, WIDTH, HEIGHT, LAYERS, DEPTH);
 			if (rose_result.empty() && !rose_result.error) {
 				// Try again
-				usleep(100*1000);
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				rose_result = translate(main_filename, frames, WIDTH, HEIGHT, LAYERS, DEPTH);
 			}
 			watches.reset(new FileWatches(rose_result));
@@ -153,7 +179,6 @@ int main(int argc, char *argv[]) {
 					width = project->width;
 					height = project->height;
 					glfwSetWindowSize(window, width * window_scale, height * window_scale);
-					glViewport(0, 0, width * window_scale, height * window_scale);
 				}
 			}
 		}
@@ -219,7 +244,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		// Render
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		if (project) {
 			if (project->draw(frame, overlay_enabled)) {
 				glfwSwapBuffers(window);
@@ -236,11 +261,11 @@ int main(int argc, char *argv[]) {
 		if (playing && project) {
 			int prev_frame = frame;
 			do {
-				usleep(1000);
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 				frame = (int)(player.get_time() * framerate);
 			} while (frame == prev_frame);
 		} else {
-			usleep(100000);
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
 

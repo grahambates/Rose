@@ -38,23 +38,27 @@ int MusicPlayer::callback(void *output, unsigned long frameCount, double outputT
 	int remaining = n_samples - samplepos;
 	int copy = std::max(0, std::min((int)frameCount, remaining));
 	memset(output, 0, frameCount * 4);
-	memcpy(output, &wavdata[samplepos * 2], copy * 4);
+	if (copy > 0) memcpy(output, &wavdata[samplepos * 2], copy * 4);
 	samplepos += frameCount;
 	return paContinue;
 }
 
 
 MusicPlayer::MusicPlayer() {
-	Pa_Initialize();
 }
 
 MusicPlayer::~MusicPlayer() {
 	if (stream) Pa_CloseStream(stream);
-	Pa_Terminate();
+	if (audio_initialized) Pa_Terminate();
 	if (wavdata) free(wavdata);
 }
 
 void MusicPlayer::load(const char *wav_filename) {
+	if (Pa_Initialize() != paNoError) {
+		printf("Error initializing audio!\n");
+		exit(1);
+	}
+	audio_initialized = true;
 	FILE *fp = fopen(wav_filename,"rb");
 	if (!fp) {
 		printf("Unable to open music file %s\n", wav_filename);
@@ -81,16 +85,24 @@ double MusicPlayer::length() {
 }
 
 void MusicPlayer::set_time(double time) {
+	if (!wavdata) {
+		clock_start = std::chrono::steady_clock::now();
+		clock_time = time;
+		return;
+	}
 	samplepos = (int) (time * sample_rate);
 	time_offset = Pa_GetStreamTime(stream) - time;
 }
 
 double MusicPlayer::get_time() {
+	if (!wavdata) {
+		return clock_time + std::chrono::duration<double>(std::chrono::steady_clock::now() - clock_start).count();
+	}
 	return Pa_GetStreamTime(stream) - time_offset;
 }
 
 void MusicPlayer::start(double time) {
-	if (!stream) {
+	if (wavdata && !stream) {
 		if (Pa_OpenDefaultStream(&stream, 0, 2, paInt16, sample_rate, STREAM_BUFFER_SIZE, stream_callback, this)) {
 			printf("Error opening audio output!\n");
 			exit(1);
